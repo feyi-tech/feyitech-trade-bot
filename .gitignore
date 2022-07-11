@@ -1,0 +1,7 @@
+
+ignores/
+logs/
+chart_photos/
+utils/config.py
+
+**/__pycache__/

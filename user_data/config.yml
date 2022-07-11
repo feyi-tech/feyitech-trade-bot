@@ -1,0 +1,4 @@
+---
+secrets:
+  telegram_token: '' # enter your Telegram Bot token
+  admin_chat_id:  # enter your chat ID/user ID to prevent other users to use the bot

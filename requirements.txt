@@ -1,0 +1,9 @@
+click
+loguru
+pandas
+numpy
+plotly
+kaleido
+sqlalchemy
+python-binance
+python-telegram-bot
