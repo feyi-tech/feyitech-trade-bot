@@ -53,7 +53,6 @@ class Trader:
         self.klines_type = HistoricalKlinesType.FUTURES
 
         self.balance = 50
-        self.profits = 0
         self.pnl = 50 # balance + profits
         self.total_longs = 0
         self.total_shorts =  0
@@ -115,10 +114,12 @@ class Trader:
         {self.build_key_value('Margin Type', '' if self.current_position.margin_type is None else self.current_position.margin_type)}\
         {self.build_key_value('Current TP', round(self.current_position.tp, 2))}\
         {self.build_key_value('Current SL', round(self.current_position.sl, 2))}\
+        {self.build_key_value('Current TP Temp', round(self.current_position.tp_temp, 2))}\
+        {self.build_key_value('Current SL Temp', round(self.current_position.sl_temp, 2))}\
             "
     def last_position_text(self):
         if self.last_position is None:
-            return '<b>No Position Opened Yet! Bot probably waiting for an optimum position</b>\n' if self.current_position is not None else '<b>No Position Closed Yet! Bot is still trading its first position.</b>\n'
+            return '<b>No Position Opened Yet! Bot probably waiting for an optimum position</b>\n' if self.current_position is None else '<b>No Position Closed Yet! Bot is still trading its first position.</b>\n'
         else:
             return f"{self.build_key_value('Volume/Size', f'{round(self.last_position.volume, 4)} {self.get_symbol().baseAsset}')}\
         {self.build_key_value('Type', 'LONG' if self.last_position.order_type == 'buy' else 'SHORT')}\
@@ -139,6 +140,8 @@ class Trader:
         {self.build_key_value('Margin Type', '' if self.last_position.margin_type is None else self.last_position.margin_type)}\
         {self.build_key_value('Last TP', round(self.last_position.tp, 2))}\
         {self.build_key_value('Last SL', round(self.last_position.sl, 2))}\
+        {self.build_key_value('Last TP Temp', round(self.last_position.tp_temp, 2))}\
+        {self.build_key_value('Last SL Temp', round(self.last_position.sl_temp, 2))}\
             "
     
     def get_status(self, caller_id):
@@ -262,12 +265,15 @@ class Trader:
             # this may happen if the user panicked
             # the user could have also tried to game the bot fee by manually closing on profit
             ok = True
+        # urllib3 HTTPError ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+        elif 'connection' in str(e).lower():
+            ok = True
         else:
-            logger.error(f'TraderError: {e}')
             try:
                 self.stop(str(e))
             except Exception as e:
                 self.handle_close_error(e)
+        logger.error(f'TraderError: {e}')
 
     def handle_close_error(self, e):
         #APIError(code=-4129): Time in Force (TIF) GTE can only be used 
@@ -278,8 +284,12 @@ class Trader:
             # this may happen if the user panicked
             # the user could have also tried to game the bot fee by manually closing on profit
             ok = True
+        # urllib3 HTTPError ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+        elif 'connection' in str(e).lower():
+            ok = True
         else:
-            logger.error(f'TraderError: {e}')
+            notok = True
+        logger.error(f'TraderError: {e}')
 
 
     def trade(self):
@@ -358,8 +368,8 @@ class Trader:
         # log the closed position into the database
         # -- log code here --
         # take bot's fee from user's profit
-        if position.profits > 0 and Config.bot_fee_profit_percentage > 0 and is_valid_wallet_address(Config.bot_fee_profit_destination):
-            fee = (position.profits * Config.bot_fee_profit_percentage) / 100
+        if position.profit > 0 and Config.bot_fee_profit_percentage > 0 and is_valid_wallet_address(Config.bot_fee_profit_destination):
+            fee = (position.profit * Config.bot_fee_profit_percentage) / 100
             # check if fee is greater than minimum withdrawn.
             # if greater or equal, withdraw the fee to the destination. 
             # if less save the fee as the amount the user is owing the bot and deduct 
@@ -506,7 +516,7 @@ class Trader:
                 type='TAKE_PROFIT_MARKET',
                 #positionSide='LONG' if position.order_type == 'buy' else 'SHORT',
                 quantity=position.volume,
-                stopPrice=position.tp,
+                stopPrice=position.tp if position.tp_temp == 0 else position.tp_temp,
                 closePosition=True,
                 timeInForce='GTE_GTC',
                 #reduceOnly=True
@@ -530,7 +540,7 @@ class Trader:
                 type='STOP_MARKET',
                 #positionSide='LONG' if position.order_type == 'buy' else 'SHORT',
                 quantity=position.volume,
-                stopPrice=position.sl,
+                stopPrice=position.sl if position.sl_temp == 0 else position.sl_temp,
                 closePosition=True,
                 timeInForce='GTE_GTC',
                 #reduceOnly=True

@@ -1,4 +1,5 @@
 from loguru import logger
+from sqlalchemy import true
 from utils.constants import Constants
 from utils.trade_logger import filelog
 
@@ -25,6 +26,10 @@ class Position:
 
         self.tp = 0
         self.sl = 0
+        # used to decrease the close condition price to the latest price so the trade can close 
+        # as quick as possible
+        self.tp_temp = 0
+        self.sl_temp = 0
 
         self.trigger_exit_price = None
         self.exit_price = 0
@@ -59,47 +64,106 @@ class Position:
         self.profit = (self.exit_price - self.entry_price) * self.volume if self.order_type == 'buy' \
                                                     else (self.entry_price - self.exit_price) * self.volume
 
+    def change_price(self, price, percentage):
+        return self.parent.get_precise_price(price + (price * percentage) / 100)
+
     def close_position(self, action=None, trigger_exit_price=None):
         if trigger_exit_price is not None:
             self.trigger_exit_price = trigger_exit_price
 
-        current_price = self.parent.get_current_price()
-        change = (current_price * 0.5) / 100 # 0.5%
+        current_price = trigger_exit_price if trigger_exit_price is not None else self.parent.get_current_price()
 
-        price_up = self.parent.get_precise_price(current_price + change)
-        price_down = self.parent.get_precise_price(current_price - change)
+        closed = False
+        close_price_change_percentage = 0.1
+        close_price_change_percentage_diff = 0.1
+        min_close_price_change_percentage = 0.1
+        max_close_price_change_percentage = 0.2
+        while closed is False:
+            closed = self.try_close(current_price, close_price_change_percentage)
+            close_price_change_percentage = close_price_change_percentage + close_price_change_percentage_diff
+            if close_price_change_percentage > max_close_price_change_percentage:
+                close_price_change_percentage = min_close_price_change_percentage
+
+    def try_close(self, current_price, percentage):
+        price_up = self.change_price(current_price, percentage)
+        price_down = self.change_price(current_price, percentage * -1)
 
         action_validation = None
         if (current_price <= float(self.sl) and self.order_type == 'buy'):
-            self.sl = price_down
-            action_validation = Position.SL
+            try:
+                self.parent.stop_loss(self)
+                self.parent.take_profit(self)
+                return True
+            except:
+                self.sl = price_down
+                self.tp_temp = price_up
+                action_validation = Position.SL
+                try:
+                    self.parent.stop_loss(self)
+                    self.parent.take_profit(self)
+                    return True
+                except:
+                    return False
         elif (current_price >= float(self.sl) and self.order_type == 'sell'):
-            self.sl = price_up
-            action_validation = Position.SL
+            try:
+                self.parent.stop_loss(self)
+                self.parent.take_profit(self)
+                return True
+            except:
+                self.sl = price_up
+                self.tp_temp = price_down
+                action_validation = Position.SL
+                try:
+                    self.parent.stop_loss(self)
+                    self.parent.take_profit(self)
+                    return True
+                except:
+                    return False
         elif (current_price >= float(self.tp) and self.order_type == 'buy'):
-            self.tp = price_up
-            action_validation = Position.TP
+            try:
+                self.parent.take_profit(self)
+                self.parent.stop_loss(self)
+                return True
+            except:
+                self.tp = price_up
+                self.sl_temp = price_down
+                action_validation = Position.TP
+                try:
+                    self.parent.take_profit(self)
+                    self.parent.stop_loss(self)
+                    return True
+                except:
+                    return False
         elif (current_price <= float(self.tp) and self.order_type == 'sell'):
-            self.tp = price_down
-            action_validation = Position.TP
-
-        # action will be None if a panic close was called.
-        # Example is when an uknown exception is thrown, the current position is closed
-        # to avoid loss of profits due to possible failure of the bot to access data needed due to the error.
-
-        # action will not be None when the last close triggers the take profit or stop loss
-        # in case it is not None, we have to make sure the current price makes the same trigger 
-        # before take profit and stop loss order is sent to the exchange
-        if action is None or action == action_validation:
-            self.parent.take_profit(self)
-            self.parent.stop_loss(self)
+            try:
+                self.parent.take_profit(self)
+                self.parent.stop_loss(self)
+                return True
+            except:
+                self.tp = price_down
+                self.sl_temp = price_up
+                action_validation = Position.TP
+                try:
+                    self.parent.take_profit(self)
+                    self.parent.stop_loss(self)
+                    return True
+                except:
+                    return False
         else:
-            logger.warning(f'closeCalledFalsePositive: {self.asdict()}')
-            filelog(
-                f'{Constants.log_dir_name}/{Constants.warning_log_filename}', 
-                f'--closeCalledFalsePositive--\n {self.asdict()}' + 
-                Constants.log_text_nl
-            )
+            try:
+                self.parent.take_profit(self)
+                self.parent.stop_loss(self)
+                return True
+            except:
+                self.tp_temp = price_up if self.order_type == 'buy' else price_down
+                self.sl_temp = price_up if self.order_type == 'sell' else price_down
+                try:
+                    self.parent.take_profit(self)
+                    self.parent.stop_loss(self)
+                    return True
+                except:
+                    return False
+
 
     def asdict(self):
         return {
@@ -118,7 +182,9 @@ class Position:
             'margin_type': self.margin_type,	
 
             'tp': self.tp,	
-            'sl': self.sl,	
+            'sl': self.sl,
+            'tp_temp': self.tp_temp,	
+            'sl_temp': self.sl_temp,	
 
             'trigger_exit_price': self.trigger_exit_price,	
             'exit_price': self.exit_price,	
