@@ -20,6 +20,11 @@ class Config:
     base_assets_blacklist = []
     quote_assets_whitelist = ['USDT', 'BUSD']
     quote_assets_blacklist = []
+    time_format = '%b, %d %Y - %I:%M:%S %p'
+    # the percentage of users profits the bot takes as profit when users make profits
+    bot_fee_profit_percentage = 0
+    # the ERC20 address the bot's fee should be withdrawn to when users make profits
+    bot_fee_profit_destination = None 
     class secrets:
         telegram_token = '' # enter your Telegram Bot token
         admin_chat_id = '' # enter your chat ID/user ID to prevent other users to use the bot

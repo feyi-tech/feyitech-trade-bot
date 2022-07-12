@@ -57,7 +57,7 @@ class AddTradeConversation:
         assert context.user_data is not None
         context.user_data[self.user_data_key(update)] = {}
 
-        chat_message(update, context, text='Please send me the trading pair symbol in the format, <i>SYMBOL@type</i>. For example, enter <b>BTCBUSD@f</b> for futures or <b>BTCBUSD@s</b> for spot.', edit=False)
+        chat_message(update, context, text='Please send me the futures USDM trading pair symbol you want to trade. For example, enter <b>BTCUSDT</b> or <b>btcusdt</b> to trade the BTC and ETH pair.', edit=False)
         return self.next.SYMBOL
 
     @check_chat_id

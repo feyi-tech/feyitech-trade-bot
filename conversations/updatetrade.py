@@ -170,23 +170,32 @@ class UpdateTradeConversation:
             + f'{"Margin Percentage" if is_futures else "Spot BUSD/USDT Percentage"}: <b>{margin_pct}%</b>\n'
             + (f'Leverage: <b>{leverage}x</b>' if is_futures else '')
         )
+        '''
+        reply_markup = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("✅ Yes and Don't Use Order Book Strategy", callback_data='ok'),
+                ],
+                [
+                    InlineKeyboardButton('✅ Yes and Use Order Book Strategy', callback_data='ok_order_book')
+                ],
+                [
+                    InlineKeyboardButton('❌ Cancel', callback_data='cancel'),
+                ]
+            ]
+        )
+        '''
+        reply_markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Yes", callback_data='ok'),
+                InlineKeyboardButton('❌ Cancel', callback_data='cancel'),
+            ]
+        ])
         chat_message(
             update,
             context,
             text=message,
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton("✅ Yes and Don't Use Order Book Strategy", callback_data='ok'),
-                    ],
-                    [
-                        InlineKeyboardButton('✅ Yes and Use Order Book Strategy', callback_data='ok_order_book')
-                    ],
-                    [
-                        InlineKeyboardButton('❌ Cancel', callback_data='cancel'),
-                    ]
-                ]
-            ),
+            reply_markup=reply_markup,
             edit=False,
         )
         return self.next.SUMMARY

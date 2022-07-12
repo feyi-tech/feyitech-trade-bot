@@ -18,6 +18,7 @@ from utils.trade_logger import filelog, chartlog
 from utils.indicators import get_adx, get_atr, get_mfi, get_rsi, get_supertrend, get_vwap
 from utils.math import add, op_values_at_index, roundup
 from traderstatus import TraderStatus
+from utils.wallet import is_valid_wallet_address
 
 indicator_period = 10
 indicator_factor = 3
@@ -69,7 +70,6 @@ class Trader:
 
         # logs for all strategies
         self.close = 0
-        self.close_time = 0
         self.adx = 0
         self.vwap = 0
 
@@ -78,22 +78,13 @@ class Trader:
         self.supertrend_vwc = 0
         self.supertrend_trend = 0
         
-        self.supertrend_signal = 0
-        self.ob_signal = 0
-        self.ob_signal_strength = 0
-
-        
         self.first_trade_time = None
         self.last_trade_time = None
 
-        self.last_trade_type = 0
-        self.last_trade_price = 0
-        self.last_trade_close_price = 0
-        self.last_trade_volume = 0
-        self.last_trade_cost = 0
-        self.last_trade_tp = 0
-        self.last_trade_sl = 0
-        self.last_trade_pnl = 0
+        self.current_position = None
+        self.last_position = None
+
+        self.current_price = 0
         self.run_counts = 0
 
     # calulate the volume of an unstable coin an amount of stable coin can buy
@@ -101,51 +92,121 @@ class Trader:
     def amount_to_volume(self, amount, volume_price):
         return amount * volume_price
 
-    def build_key_value(self, key, value, admin_only=None):
-        return f'<b>{key}:</b> {value if value is not None else ""}\n' if admin_only is None or is_admin(admin_only) else ''
+    def build_key_value(self, key, value, hide=False, admin_only=None):
+        return '' if hide else f'<b>{key}:</b> {value if value is not None else ""}\n' if admin_only is None or is_admin(admin_only) else ''
 
+    def current_position_text(self):
+        if self.current_position is None:
+            return '<b>No Position Opened Yet! Bot probably waiting for an optimum position</b>\n'
+        else:
+            return f"{self.build_key_value('Volume/Size', f'{round(self.current_position.volume, 4)} {self.get_symbol().baseAsset}')}\
+        {self.build_key_value('Type', 'LONG' if self.current_position.order_type == 'buy' else 'SHORT')}\
+        {self.build_key_value('Position Amount', round(self.current_position.amount, 2))}\
+        {self.build_key_value('Entry Time', self.current_position.entry_time if self.current_position.entry_time is None else self.current_position.entry_time.strftime(Config.time_format))}\
+        {self.build_key_value('Entry Price', round(self.current_position.entry_price, 2))}\
+        {self.build_key_value('Mark Price', round(self.current_position.mark_price, 2))}\
+        {self.build_key_value('Liquidation Price', round(self.current_position.liq_price, 2))}\
+        {self.build_key_value('Leverage', f'{round(self.current_position.leverage, 2)}x')}\
+        {self.build_key_value('Unrealised Profit', round(self.current_position.unrealised_profit, 2))}\
+        {self.build_key_value('Isolated Margin', round(self.current_position.isolated_margin, 2))}\
+        {self.build_key_value('Isolated Wallet', round(self.current_position.isolated_wallet, 2))}\
+        {self.build_key_value('Notional', round(self.current_position.notional, 2))}\
+        {self.build_key_value('Max Notional', round(self.current_position.max_notional, 2))}\
+        {self.build_key_value('Margin Type', '' if self.current_position.margin_type is None else self.current_position.margin_type)}\
+        {self.build_key_value('Current TP', round(self.current_position.tp, 2))}\
+        {self.build_key_value('Current SL', round(self.current_position.sl, 2))}\
+            "
+    def last_position_text(self):
+        if self.last_position is None:
+            return '<b>No Position Opened Yet! Bot probably waiting for an optimum position</b>\n' if self.current_position is not None else '<b>No Position Closed Yet! Bot is still trading its first position.</b>\n'
+        else:
+            return f"{self.build_key_value('Volume/Size', f'{round(self.last_position.volume, 4)} {self.get_symbol().baseAsset}')}\
+        {self.build_key_value('Type', 'LONG' if self.last_position.order_type == 'buy' else 'SHORT')}\
+        {self.build_key_value('Position Amount', round(self.last_position.amount, 2))}\
+        {self.build_key_value('Entry Time', self.last_position.entry_time if self.last_position.entry_time is None else self.last_position.entry_time.strftime(Config.time_format))}\
+        {self.build_key_value('Entry Price', round(self.last_position.entry_price, 2))}\
+        {self.build_key_value('Exit Time', self.last_position.exit_time if self.last_position.exit_time is None else self.last_position.exit_time.strftime(Config.time_format))}\
+        {self.build_key_value('Exit Price', round(self.last_position.exit_price, 2))}\
+        {self.build_key_value('Mark Price', round(self.last_position.mark_price, 2))}\
+        {self.build_key_value('Liquidation Price', round(self.last_position.liq_price, 2))}\
+        {self.build_key_value('Leverage', f'{round(self.last_position.leverage, 2)}x')}\
+        {self.build_key_value('Unrealised Profit Before', round(self.last_position.unrealised_profit, 2))}\
+        {self.build_key_value('Realised Profit', round(self.last_position.profit, 2))}\
+        {self.build_key_value('Isolated Margin', round(self.last_position.isolated_margin, 2))}\
+        {self.build_key_value('Isolated Wallet', round(self.last_position.isolated_wallet, 2))}\
+        {self.build_key_value('Notional', round(self.last_position.notional, 2))}\
+        {self.build_key_value('Max Notional', round(self.last_position.max_notional, 2))}\
+        {self.build_key_value('Margin Type', '' if self.last_position.margin_type is None else self.last_position.margin_type)}\
+        {self.build_key_value('Last TP', round(self.last_position.tp, 2))}\
+        {self.build_key_value('Last SL', round(self.last_position.sl, 2))}\
+            "
     
     def get_status(self, caller_id):
         return f"\
-        ===== <b>{self.name}</b> =====\n\n\
-        {self.build_key_value('AlgoRunCount', self.run_counts)}\n\
+        === <b>{self.name} | {round(self.current_price, 2)}</b> ===\n\
+        {self.build_key_value('AlgoRunCount', self.run_counts)}\
         {self.build_key_value('Status', self.status)}\
-        {self.build_key_value('PNL', round(self.pnl, 2))}\
-        {self.build_key_value('Last Trade PNL', round(self.last_trade_pnl, 2))}\
+        {self.build_key_value('PNL', round(self.pnl, 2))}\n\
+        {self.build_key_value('', '=== <b>General Info</b> ===<b>:</b>')}\
         {self.build_key_value('Total Longs', self.total_longs)}\
         {self.build_key_value('Total Shorts', self.total_shorts)}\
         {self.build_key_value('Total Trades', self.total_trades)}\
-        {self.build_key_value('Margin Percentage', f'{self.margin_pct}%')}\
+        {self.build_key_value('Margin', f'{self.margin_pct}%')}\
         {self.build_key_value('Leverage', f'{round(self.leverage, 2)}x')}\
-        {self.build_key_value('First Trade Time', self.first_trade_time if self.first_trade_time is None else self.first_trade_time.strftime('%b, %d %Y at %I:%M:%S %p'))}\
-        {self.build_key_value('Last Trade Time', self.last_trade_time if self.last_trade_time is None else self.last_trade_time.strftime('%b, %d %Y at %I:%M:%S %p'))}\
-        {self.build_key_value('Last Trade Type', self.last_trade_type)}\
-        {self.build_key_value('Last Trade Price', round(self.last_trade_price, 2))}\
-        {self.build_key_value('Last Trade Close Price', round(self.last_trade_close_price, 2))}\
-        {self.build_key_value('Last Trade Volume', round(self.last_trade_volume, 4))}\
-        {self.build_key_value('Last Trade Cost', round(self.last_trade_cost, 2))}\
-        {self.build_key_value('Last Trade Current TP', round(self.last_trade_tp, 2))}\
-        {self.build_key_value('Last Trade Current SL', round(self.last_trade_sl, 2))}\
-        {self.build_key_value('16hrs Average Trend Strength Percentage', f'{round(self.avg_trend_strength, 2)}%')}\n\
-        {self.build_key_value('', '===== <b>Logs For The Developer</b> =====<b>:</b>', caller_id)}\n\
-        {self.build_key_value('close', round(self.close, 2), caller_id)}\
-        {self.build_key_value('adx', round(self.adx, 2), caller_id)}\
-        {self.build_key_value('vwap', round(self.vwap, 2), caller_id)}\
-        {self.build_key_value('supertrend_is_uptrend', self.supertrend_is_uptrend, caller_id)}\
-        {self.build_key_value('supertrend_vwc', round(self.supertrend_vwc, 2), caller_id)}\
-        {self.build_key_value('supertrend_trend', round(self.supertrend_trend, 2), caller_id)}\
+        {self.build_key_value('First Trade Time', self.first_trade_time if self.first_trade_time is None else self.first_trade_time.strftime(Config.time_format))}\
+        {self.build_key_value('Last Trade Time', self.last_trade_time if self.last_trade_time is None else self.last_trade_time.strftime(Config.time_format))}\
+        {self.build_key_value('', '=== <b>16hrs Trend Info</b> ===<b>:</b>')}\
+        {self.build_key_value('Avg. Trend Strength', f'{round(self.avg_trend_strength, 2)}%')}\n\
+        {self.build_key_value('', '=== <b>Current Position Info</b> ===<b>:</b>')}\
+        {self.current_position_text()}\n\
+        {self.build_key_value('', '=== <b>Last Position Info</b> ===<b>:</b>')}\
+        {self.last_position_text()}\n\
+        {self.build_key_value('', '=== <b>Dev Logs</b> ===<b>:</b>')}\
+        {self.build_key_value('close', round(self.close, 2))}\
+        {self.build_key_value('adx', round(self.adx, 2))}\
+        {self.build_key_value('vwap', round(self.vwap, 2))}\
+        {self.build_key_value('supertrend_is_uptrend', self.supertrend_is_uptrend)}\
+        {self.build_key_value('supertrend_vwc', round(self.supertrend_vwc, 2))}\
+        {self.build_key_value('supertrend_trend', round(self.supertrend_trend, 2))}\
     "
+
+    def get_current_price(self):
+        # return float(self.client.futures_mark_price(symbol=self.symbol)['markPrice'])
+        return float(self.client.futures_symbol_ticker(symbol=self.symbol)['price'])
+
+    def get_symbol(self):
+        return self.parent.get_symbol_info(symbol=self.symbol, is_futures=True)
 
     def update_balance(self):
         balances = self.client.futures_account_balance()
         balance_key = 'balance'
         for balance in balances:
-            symbol_info = self.parent.get_symbol_info(symbol=self.symbol, is_futures=True)
+            symbol_info = self.get_symbol()
             if balance['asset'] == symbol_info.quoteAsset:
                 self.balance = float(balance[balance_key])
                 self.pnl = self.balance
                 break
-            
+
+    def update_current_position_info(self):
+        current_position = self.get_open_position()
+        if current_position is not None:
+            info = self.client.futures_position_information(symbol=self.symbol)
+            if info is not None and len(info) > 0:
+                info = self.dict_to_object(info[0])
+                # if the entry price is not greater than zero, it means there's no position opened yet
+                if float(info.entryPrice) > 0:
+                    current_position.amount = float(info.positionAmt)
+                    current_position.entry_price = float(info.entryPrice)
+                    current_position.mark_price = float(info.markPrice)
+                    current_position.liq_price = float(info.liquidationPrice)
+                    current_position.leverage = float(info.leverage)
+                    current_position.unrealised_profit = float(info.unRealizedProfit)
+                    current_position.isolated_margin = float(info.isolatedMargin)
+                    current_position.isolated_wallet = float(info.isolatedWallet)
+                    current_position.notional = float(info.notional)
+                    current_position.max_notional = float(info.maxNotionalValue)
+                    current_position.margin_type = info.marginType
+                    self.current_position = current_position       
 
     def run_trade(self):
         self.update_settings_on_exchange()
@@ -155,8 +216,14 @@ class Trader:
                 
                 # get the latest account balance so that the bot can calculate 
                 # a percentage of it for the next trade
-                if self.get_open_position() is None:
-                    self.update_balance()
+                #if self.get_open_position() is None:
+                self.update_balance()
+
+                # update the current position info
+                self.update_current_position_info()
+
+                # set the current price
+                self.current_price = self.get_current_price()
 
                 # get historical data to for the bot to strategize on    
                 klines = self.client.get_historical_klines(
@@ -181,11 +248,38 @@ class Trader:
                 # check the states of the position, take profit, and stop loss orders made when the 
                 # bot reacted to the chart and make decisions based on the states
                 self.check_orders()
+                time.sleep(Config.fetch_interval_seconds)
                     
             except Exception as e:
-                logger.error(f'TraderError: {e}')
+                self.handle_error(e)
+
+    def handle_error(self, e):
+        #APIError(code=-4129): Time in Force (TIF) GTE can only be used 
+        # with open positions or open orders. Please ensure 
+        # that open orders or positions are available.
+        if 'apierror(code=-4129)' in str(e).lower():
+            # this means the user has closed the trade outside of the bot
+            # this may happen if the user panicked
+            # the user could have also tried to game the bot fee by manually closing on profit
+            ok = True
+        else:
+            logger.error(f'TraderError: {e}')
+            try:
                 self.stop(str(e))
-            time.sleep(Config.fetch_interval_seconds)
+            except Exception as e:
+                self.handle_close_error(e)
+
+    def handle_close_error(self, e):
+        #APIError(code=-4129): Time in Force (TIF) GTE can only be used 
+        # with open positions or open orders. Please ensure 
+        # that open orders or positions are available.
+        if 'apierror(code=-4129)' in str(e).lower():
+            # this means the user has closed the trade outside of the bot
+            # this may happen if the user panicked
+            # the user could have also tried to game the bot fee by manually closing on profit
+            ok = True
+        else:
+            logger.error(f'TraderError: {e}')
 
 
     def trade(self):
@@ -239,15 +333,6 @@ class Trader:
         df = pd.DataFrame([position.asdict() for position in self.positions])
         return df
 
-    def update_last_trade_info(self, position):
-        self.last_trade_type = position.order_type
-        self.last_trade_price = position.open_price
-        self.last_trade_close_price = position.close_price
-        self.last_trade_volume = position.volume
-        self.last_trade_cost = (position.open_price * position.volume) / self.leverage
-        self.last_trade_tp = position.tp
-        self.last_trade_sl = position.sl
-
     def get_open_position(self):
         last_position = self.get_last_position()
         return last_position if last_position is not None and last_position.is_closed is False else None
@@ -263,6 +348,27 @@ class Trader:
         order.avgPrice = float(order.avgPrice)
         return order.iloc[0]
 
+    # log the closed position into the database and take bot's fee from user's profit
+    def on_postion_closed(self, position):
+        ## reset the current position and update the last position ##
+        self.current_position = None
+        self.last_position = position
+        # update the trade status
+        self.status = TraderStatus.waiting
+        # log the closed position into the database
+        # -- log code here --
+        # take bot's fee from user's profit
+        if position.profits > 0 and Config.bot_fee_profit_percentage > 0 and is_valid_wallet_address(Config.bot_fee_profit_destination):
+            fee = (position.profits * Config.bot_fee_profit_percentage) / 100
+            # check if fee is greater than minimum withdrawn.
+            # if greater or equal, withdraw the fee to the destination. 
+            # if less save the fee as the amount the user is owing the bot and deduct 
+            # it from the pnl before calulating trades volume in the future.
+            # Also notify the users of the bot fee owned on there status
+            code_to_be_continued = True
+
+    # the current and last positions are updated here when position order status is filled
+    # and when tp or sl order is filled respectively
     def check_orders(self):
         # get the last position if it hasn't been closed yet
         last_position = self.get_open_position()
@@ -292,7 +398,7 @@ class Trader:
             # log if the order has filled or not from the above iteration result
             last_position.orderFilled = orderFilled
 
-            # check the position order and update the open_price and open_time if it has filled
+            # check the position order and update the entry_price and entry_time if it has filled
             # but if it has expired, remove the position since there's nothing being traded
             if orderFilled and hasInitialisedPosition is False:
                 posOrder = self.client.futures_get_order(symbol=self.symbol, orderId=last_position.orderId)
@@ -300,22 +406,22 @@ class Trader:
                     posOrder = self.order_to_df(posOrder)
                     if posOrder.status == 'FILLED':
                         # update the order entry price and time
-                        last_position.open_price = posOrder.avgPrice
-                        last_position.open_time = posOrder.updateTime
+                        last_position.entry_price = posOrder.avgPrice
+                        last_position.entry_time = posOrder.updateTime
                         # update the "take profit" and "stop loss" mark of the trade position
                         last_position.update_tp_sl()
                         # reset the first and last trade time
                         if self.first_trade_time is None:
-                            self.first_trade_time = last_position.open_time
-                        self.last_trade_time = last_position.open_time
+                            self.first_trade_time = last_position.entry_time
+                        self.last_trade_time = last_position.entry_time
                         # reset total counts for longs, shorts, and all trades in general
                         if last_position.order_type == 'buy': 
                             self.total_longs = self.total_longs + 1
                         else:
                             self.total_shorts = self.total_shorts + 1
                         self.total_trades = self.total_trades + 1
-                        # reset the rest of the last trade
-                        self.update_last_trade_info(last_position)
+                        ## update the current position ##
+                        self.current_position = last_position
                     elif posOrder.status == 'EXPIRED':
                         # remove the order
                         self.positions = self.positions[0:len(self.positions) - 1]
@@ -337,11 +443,10 @@ class Trader:
                     if closeOrder is not None: # tp or sl was hit
                         # update the position close price and time so the chart 
                         # and profit calculator can use them
-                        last_position.close_price = closeOrder.avgPrice
-                        last_position.close_time = closeOrder.updateTime
+                        last_position.exit_price = closeOrder.avgPrice
+                        last_position.exit_time = closeOrder.updateTime
                         last_position.update_profit()
-                        self.last_trade_pnl = last_position.profit
-                        self.status = TraderStatus.waiting
+                        self.on_postion_closed(last_position)
                     else:
                         # If we got here..., that's wierd and bad. 
                         # It means both the tp and sl order canceled or expired.
@@ -352,7 +457,6 @@ class Trader:
                         last_position.tpClientOrderId = None
                         last_position.slClientOrderId = None
                         last_position.is_closed = False
-                self.update_last_trade_info(last_position)
 
             logger.info('--check_orders:last_position:--')
             logger.info(last_position.asdict())
@@ -375,7 +479,7 @@ class Trader:
                 #positionSide='LONG' if position.order_type == 'buy' else 'SHORT',
                 type='MARKET',# MARKET || LIMIT
                 quantity=position.volume,
-                #price=position.open_price,
+                #price=position.entry_price,
                 #timeInForce='IOC'#GTC (Good-Till-Cancel) || IOC (Immediate-Or-Cancel) || FOK (Fill-Or-Kill)
             )
             position.orderId = order['orderId']
@@ -451,9 +555,9 @@ class Trader:
         oldest_tick = chart_df.iloc[0]
         trades_df = self.get_positions_df()
         for i, position in trades_df.iterrows():
-            if position.is_closed and position.close_time is not None and position.close_time >= oldest_tick.time:
+            if position.is_closed and position.exit_time is not None and position.exit_time >= oldest_tick.time:
                 fig.add_shape(type="line",
-                    x0=position.open_time, y0=position.open_price, x1=position.close_time, y1=position.close_price,
+                    x0=position.entry_time, y0=position.entry_price, x1=position.exit_time, y1=position.exit_price,
                     line=dict(
                         color = "green" if position.profit >= 0 else "red",
                         width = 3
@@ -577,7 +681,6 @@ class Trader:
                     pos.tp = new_pos.tp
                     pos.sl = new_pos.sl
                     pos.tp_sl_rate = new_pos.tp_sl_rate
-                    self.update_last_trade_info(pos)
                 elif new_pos is not None or not self.use_trailing_sl_tp:# don't close yet in an indecisicve market
                     pos.close_position(Position.TP, data['close'])
             elif (float(data['close']) <= float(pos.tp) and pos.order_type == 'sell'):
@@ -586,7 +689,6 @@ class Trader:
                     pos.tp = new_pos.tp
                     pos.sl = new_pos.sl
                     pos.tp_sl_rate = new_pos.tp_sl_rate
-                    self.update_last_trade_info(pos)
                 elif new_pos is not None or not self.use_trailing_sl_tp:# don't close yet in an indecisicve market
                     pos.close_position(Position.TP, data['close'])
 
@@ -604,10 +706,11 @@ class Trader:
         return ratio * atr
 
     def calculate_volume(self, price_per_volume):
-        max_spent = (self.margin_pct * self.pnl) / 100
-        qty = max_spent / price_per_volume
+        # Initial Margin = Quantity X EntryPrice X IMR
+        # IMR = 1 / Leverage
+        margin = (self.margin_pct * self.pnl) / 100
         # calculate the quantity the leverage will get
-        qty = qty * self.leverage
+        qty = (margin * self.leverage) / price_per_volume
         info = self.parent.get_symbol_info(self.symbol, True)
         precision = int(info.quantityPrecision)
         return float("{:0.0{}f}".format(qty, precision))
@@ -621,7 +724,6 @@ class Trader:
     def logic(self, data, adx_avg) -> Position:
         pos = None
         self.close = data['close']
-        self.close_time = data['time']
         self.adx = data['adx']
         self.vwap = data['vwap']
         self.supertrend_is_uptrend = data['supertrend_is_uptrend']
@@ -639,13 +741,13 @@ class Trader:
                 logger.info('PriceAction::LONG')
                 # Position variables
                 order_type = 'buy'
-                open_price = data['close']
-                open_time = data['time']
-                volume = self.calculate_volume(open_price)
+                entry_price = data['close']
+                entry_time = data['time']
+                volume = self.calculate_volume(self.current_price)
                 tp_sl_rate = self.sl_tp_diff(data['atr'], data['adx'], adx_avg)
 
                 pos = Position(
-                    self, open_price, open_time, volume, self.leverage, order_type, tp_sl_rate
+                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate
                 )
             # if is downtrend
             # supertrend is downtrend
@@ -657,12 +759,12 @@ class Trader:
                 logger.info('PriceAction::SHORT')
                 # Position variables
                 order_type = 'sell'
-                open_price = data['close']
-                open_time = data['time']
-                volume = self.calculate_volume(open_price)
+                entry_price = data['close']
+                entry_time = data['time']
+                volume = self.calculate_volume(self.current_price)
                 tp_sl_rate = self.sl_tp_diff(data['atr'], data['adx'], adx_avg)
 
                 pos = Position(
-                    self, open_price, open_time, volume, self.leverage, order_type, tp_sl_rate
+                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate
                 )
         return pos
