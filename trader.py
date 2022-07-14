@@ -98,80 +98,77 @@ class Trader:
         if self.current_position is None:
             return '<b>No Position Opened Yet! Bot probably waiting for an optimum position</b>\n'
         else:
-            return f"{self.build_key_value('Volume/Size', f'{round(self.current_position.volume, 4)} {self.get_symbol().baseAsset}')}\
-        {self.build_key_value('Type', 'LONG' if self.current_position.order_type == 'buy' else 'SHORT')}\
-        {self.build_key_value('Position Amount', round(self.current_position.amount, 2))}\
-        {self.build_key_value('Entry Time', self.current_position.entry_time if self.current_position.entry_time is None else self.current_position.entry_time.strftime(Config.time_format))}\
-        {self.build_key_value('Entry Price', round(self.current_position.entry_price, 2))}\
-        {self.build_key_value('Mark Price', round(self.current_position.mark_price, 2))}\
-        {self.build_key_value('Liquidation Price', round(self.current_position.liq_price, 2))}\
-        {self.build_key_value('Leverage', f'{round(self.current_position.leverage, 2)}x')}\
-        {self.build_key_value('Unrealised Profit', round(self.current_position.unrealised_profit, 2))}\
-        {self.build_key_value('Isolated Margin', round(self.current_position.isolated_margin, 2))}\
-        {self.build_key_value('Isolated Wallet', round(self.current_position.isolated_wallet, 2))}\
-        {self.build_key_value('Notional', round(self.current_position.notional, 2))}\
-        {self.build_key_value('Max Notional', round(self.current_position.max_notional, 2))}\
-        {self.build_key_value('Margin Type', '' if self.current_position.margin_type is None else self.current_position.margin_type)}\
-        {self.build_key_value('Current TP', round(self.current_position.tp, 2))}\
-        {self.build_key_value('Current SL', round(self.current_position.sl, 2))}\
-        {self.build_key_value('Current TP Temp', round(self.current_position.tp_temp, 2))}\
-        {self.build_key_value('Current SL Temp', round(self.current_position.sl_temp, 2))}\
-            "
+            return "".join([self.build_key_value('Volume/Size', f'{round(self.current_position.volume, 4)} {self.get_symbol().baseAsset}'),
+        self.build_key_value('Type', 'LONG' if self.current_position.order_type == 'buy' else 'SHORT'),
+        self.build_key_value('Position Amount', round(self.current_position.amount, 2)),
+        self.build_key_value('Entry Time', f'\n{self.current_position.entry_time if self.current_position.entry_time is None else self.current_position.entry_time.strftime(Config.time_format)}'),
+        self.build_key_value('Entry Price', round(self.current_position.entry_price, 2)),
+        self.build_key_value('Mark Price', round(self.current_position.mark_price, 2)),
+        self.build_key_value('Liquidation Price', round(self.current_position.liq_price, 2)),
+        self.build_key_value('Leverage', f'{round(self.current_position.leverage, 2)}x'),
+        self.build_key_value('Unrealised Profit', round(self.current_position.unrealised_profit, 2)),
+        self.build_key_value('Isolated Margin', round(self.current_position.isolated_margin, 2)),
+        self.build_key_value('Isolated Wallet', round(self.current_position.isolated_wallet, 2)),
+        self.build_key_value('Notional', round(self.current_position.notional, 2)),
+        self.build_key_value('Max Notional', round(self.current_position.max_notional, 2)),
+        self.build_key_value('Margin Type', '' if self.current_position.margin_type is None else self.current_position.margin_type),
+        self.build_key_value('Current TP', round(self.current_position.tp, 2)),
+        self.build_key_value('Current SL', round(self.current_position.sl, 2)),
+        self.build_key_value('Current TP Trigger', round(self.current_position.tp_trigger, 2)),
+        self.build_key_value('Current SL Trigger', round(self.current_position.sl_trigger, 2))])
+
     def last_position_text(self):
         if self.last_position is None:
             return '<b>No Position Opened Yet! Bot probably waiting for an optimum position</b>\n' if self.current_position is None else '<b>No Position Closed Yet! Bot is still trading its first position.</b>\n'
         else:
-            return f"{self.build_key_value('Volume/Size', f'{round(self.last_position.volume, 4)} {self.get_symbol().baseAsset}')}\
-        {self.build_key_value('Type', 'LONG' if self.last_position.order_type == 'buy' else 'SHORT')}\
-        {self.build_key_value('Position Amount', round(self.last_position.amount, 2))}\
-        {self.build_key_value('Entry Time', self.last_position.entry_time if self.last_position.entry_time is None else self.last_position.entry_time.strftime(Config.time_format))}\
-        {self.build_key_value('Entry Price', round(self.last_position.entry_price, 2))}\
-        {self.build_key_value('Exit Time', self.last_position.exit_time if self.last_position.exit_time is None else self.last_position.exit_time.strftime(Config.time_format))}\
-        {self.build_key_value('Exit Price', round(self.last_position.exit_price, 2))}\
-        {self.build_key_value('Mark Price', round(self.last_position.mark_price, 2))}\
-        {self.build_key_value('Liquidation Price', round(self.last_position.liq_price, 2))}\
-        {self.build_key_value('Leverage', f'{round(self.last_position.leverage, 2)}x')}\
-        {self.build_key_value('Unrealised Profit Before', round(self.last_position.unrealised_profit, 2))}\
-        {self.build_key_value('Realised Profit', round(self.last_position.profit, 2))}\
-        {self.build_key_value('Isolated Margin', round(self.last_position.isolated_margin, 2))}\
-        {self.build_key_value('Isolated Wallet', round(self.last_position.isolated_wallet, 2))}\
-        {self.build_key_value('Notional', round(self.last_position.notional, 2))}\
-        {self.build_key_value('Max Notional', round(self.last_position.max_notional, 2))}\
-        {self.build_key_value('Margin Type', '' if self.last_position.margin_type is None else self.last_position.margin_type)}\
-        {self.build_key_value('Last TP', round(self.last_position.tp, 2))}\
-        {self.build_key_value('Last SL', round(self.last_position.sl, 2))}\
-        {self.build_key_value('Last TP Temp', round(self.last_position.tp_temp, 2))}\
-        {self.build_key_value('Last SL Temp', round(self.last_position.sl_temp, 2))}\
-            "
+            return "".join([self.build_key_value('Volume/Size', f'{round(self.last_position.volume, 4)} {self.get_symbol().baseAsset}'),
+        self.build_key_value('Type', 'LONG' if self.last_position.order_type == 'buy' else 'SHORT'),
+        self.build_key_value('Position Amount', round(self.last_position.amount, 2)),
+        self.build_key_value('Entry Time', f'\n{self.last_position.entry_time if self.last_position.entry_time is None else self.last_position.entry_time.strftime(Config.time_format)}'),
+        self.build_key_value('Entry Price', round(self.last_position.entry_price, 2)),
+        self.build_key_value('Exit Time', f'\n{self.last_position.exit_time if self.last_position.exit_time is None else self.last_position.exit_time.strftime(Config.time_format)}'),
+        self.build_key_value('Exit Price', round(self.last_position.exit_price, 2)),
+        self.build_key_value('Mark Price', round(self.last_position.mark_price, 2)),
+        self.build_key_value('Liquidation Price', round(self.last_position.liq_price, 2)),
+        self.build_key_value('Leverage', f'{round(self.last_position.leverage, 2)}x'),
+        self.build_key_value('Unrealised Profit Before', round(self.last_position.unrealised_profit, 2)),
+        self.build_key_value('Realised Profit', round(self.last_position.profit, 2)),
+        self.build_key_value('Isolated Margin', round(self.last_position.isolated_margin, 2)),
+        self.build_key_value('Isolated Wallet', round(self.last_position.isolated_wallet, 2)),
+        self.build_key_value('Notional', round(self.last_position.notional, 2)),
+        self.build_key_value('Max Notional', round(self.last_position.max_notional, 2)),
+        self.build_key_value('Margin Type', '' if self.last_position.margin_type is None else self.last_position.margin_type),
+        self.build_key_value('Last TP', round(self.last_position.tp, 2)),
+        self.build_key_value('Last SL', round(self.last_position.sl, 2)),
+        self.build_key_value('Last TP Trigger', round(self.last_position.tp_trigger, 2)),
+        self.build_key_value('Last SL Trigger', round(self.last_position.sl_trigger, 2))])
     
     def get_status(self, caller_id):
-        return f"\
-        === <b>{self.name} | {round(self.current_price, 2)}</b> ===\n\
-        {self.build_key_value('AlgoRunCount', self.run_counts)}\
-        {self.build_key_value('Status', self.status)}\
-        {self.build_key_value('PNL', round(self.pnl, 2))}\n\
-        {self.build_key_value('', '=== <b>General Info</b> ===<b>:</b>')}\
-        {self.build_key_value('Total Longs', self.total_longs)}\
-        {self.build_key_value('Total Shorts', self.total_shorts)}\
-        {self.build_key_value('Total Trades', self.total_trades)}\
-        {self.build_key_value('Margin', f'{self.margin_pct}%')}\
-        {self.build_key_value('Leverage', f'{round(self.leverage, 2)}x')}\
-        {self.build_key_value('First Trade Time', self.first_trade_time if self.first_trade_time is None else self.first_trade_time.strftime(Config.time_format))}\
-        {self.build_key_value('Last Trade Time', self.last_trade_time if self.last_trade_time is None else self.last_trade_time.strftime(Config.time_format))}\
-        {self.build_key_value('', '=== <b>16hrs Trend Info</b> ===<b>:</b>')}\
-        {self.build_key_value('Avg. Trend Strength', f'{round(self.avg_trend_strength, 2)}%')}\n\
-        {self.build_key_value('', '=== <b>Current Position Info</b> ===<b>:</b>')}\
-        {self.current_position_text()}\n\
-        {self.build_key_value('', '=== <b>Last Position Info</b> ===<b>:</b>')}\
-        {self.last_position_text()}\n\
-        {self.build_key_value('', '=== <b>Dev Logs</b> ===<b>:</b>')}\
-        {self.build_key_value('close', round(self.close, 2))}\
-        {self.build_key_value('adx', round(self.adx, 2))}\
-        {self.build_key_value('vwap', round(self.vwap, 2))}\
-        {self.build_key_value('supertrend_is_uptrend', self.supertrend_is_uptrend)}\
-        {self.build_key_value('supertrend_vwc', round(self.supertrend_vwc, 2))}\
-        {self.build_key_value('supertrend_trend', round(self.supertrend_trend, 2))}\
-    "
+        return "".join([f"=== <b>{self.name} | {round(self.current_price, 2)}</b> ===\n",
+        self.build_key_value('AlgoRunCount', self.run_counts),
+        self.build_key_value('Status', self.status),
+        f"{self.build_key_value('PNL', round(self.pnl, 2))}\n",
+        self.build_key_value('', '=== <b>General Info</b> ===<b>:</b>'),
+        self.build_key_value('Total Longs', self.total_longs),
+        self.build_key_value('Total Shorts', self.total_shorts),
+        self.build_key_value('Total Trades', self.total_trades),
+        self.build_key_value('Margin', f'{self.margin_pct}%'),
+        self.build_key_value('Leverage', f'{round(self.leverage, 2)}x'),
+        self.build_key_value('First Trade Time', f'\n{self.first_trade_time if self.first_trade_time is None else self.first_trade_time.strftime(Config.time_format)}'),
+        self.build_key_value('Last Trade Time', f'\n{self.last_trade_time if self.last_trade_time is None else self.last_trade_time.strftime(Config.time_format)}'),
+        self.build_key_value('', '=== <b>16hrs Trend Info</b> ===<b>:</b>'),
+        f"{self.build_key_value('Avg. Trend Strength', f'{round(self.avg_trend_strength, 2)}%')}\n",
+        self.build_key_value('', '=== <b>Current Position Info</b> ===<b>:</b>'),
+        f"{self.current_position_text()}\n",
+        self.build_key_value('', '=== <b>Last Position Info</b> ===<b>:</b>'),
+        f"{self.last_position_text()}\n",
+        self.build_key_value('', '=== <b>Dev Logs</b> ===<b>:</b>'),
+        self.build_key_value('close', round(self.close, 2)),
+        self.build_key_value('adx', round(self.adx, 2)),
+        self.build_key_value('vwap', round(self.vwap, 2)),
+        self.build_key_value('supertrend_is_uptrend', self.supertrend_is_uptrend),
+        self.build_key_value('supertrend_vwc', round(self.supertrend_vwc, 2)),
+        self.build_key_value('supertrend_trend', round(self.supertrend_trend, 2))])
 
     def get_current_price(self):
         # return float(self.client.futures_mark_price(symbol=self.symbol)['markPrice'])
@@ -513,13 +510,13 @@ class Trader:
             order = self.client.futures_create_order(
                 symbol=self.symbol,
                 side='SELL' if position.order_type == 'buy' else 'BUY',
-                type='TAKE_PROFIT_MARKET',
+                type='TAKE_PROFIT', # 'TAKE_PROFIT' || TAKE_PROFIT_MARKET
                 #positionSide='LONG' if position.order_type == 'buy' else 'SHORT',
                 quantity=position.volume,
-                stopPrice=position.tp if position.tp_temp == 0 else position.tp_temp,
+                stopPrice=position.tp,
                 closePosition=True,
                 timeInForce='GTE_GTC',
-                #reduceOnly=True
+                price=position.tp
             )
             position.tpOrderId = order['orderId']
             position.tpClientOrderId = order['clientOrderId']
@@ -537,13 +534,13 @@ class Trader:
             order = self.client.futures_create_order(
                 symbol=self.symbol,
                 side='SELL' if position.order_type == 'buy' else 'BUY',
-                type='STOP_MARKET',
+                type='STOP', # STOP || STOP_MARKET
                 #positionSide='LONG' if position.order_type == 'buy' else 'SHORT',
                 quantity=position.volume,
-                stopPrice=position.sl if position.sl_temp == 0 else position.sl_temp,
+                stopPrice=position.sl,
                 closePosition=True,
                 timeInForce='GTE_GTC',
-                #reduceOnly=True
+                price=position.sl
             )
             position.slOrderId = order['orderId']
             position.slClientOrderId = order['clientOrderId']
@@ -681,39 +678,40 @@ class Trader:
     def close_tp_sl(self, data, new_pos):
         pos = self.get_last_position()
         if pos and not pos.is_closed:
-            if (float(data['close']) <= float(pos.sl) and pos.order_type == 'buy'):
+            if (float(data['close']) <= float(pos.sl_trigger) and pos.order_type == 'buy'):
                 pos.close_position(Position.SL, data['close'])
-            elif (float(data['close']) >= float(pos.sl) and pos.order_type == 'sell'):
+            elif (float(data['close']) >= float(pos.sl_trigger) and pos.order_type == 'sell'):
                 pos.close_position(Position.SL, data['close'])
-            elif (float(data['close']) >= float(pos.tp) and pos.order_type == 'buy'):
+            elif (float(data['close']) >= float(pos.tp_trigger) and pos.order_type == 'buy'):
                 # trailing tp and sl
                 if new_pos is not None and new_pos.order_type == pos.order_type and self.use_trailing_sl_tp:
                     pos.tp = new_pos.tp
                     pos.sl = new_pos.sl
                     pos.tp_sl_rate = new_pos.tp_sl_rate
+
+                    pos.tp_trigger = new_pos.tp_trigger
+                    pos.sl_trigger = new_pos.sl_trigger
+                    pos.tp_sl_rate_trigger = new_pos.tp_sl_rate_trigger
                 elif new_pos is not None or not self.use_trailing_sl_tp:# don't close yet in an indecisicve market
                     pos.close_position(Position.TP, data['close'])
-            elif (float(data['close']) <= float(pos.tp) and pos.order_type == 'sell'):
+            elif (float(data['close']) <= float(pos.tp_trigger) and pos.order_type == 'sell'):
                 # trailing tp and sl
                 if new_pos is not None and new_pos.order_type == pos.order_type and self.use_trailing_sl_tp:
                     pos.tp = new_pos.tp
                     pos.sl = new_pos.sl
                     pos.tp_sl_rate = new_pos.tp_sl_rate
+                    
+                    pos.tp_trigger = new_pos.tp_trigger
+                    pos.sl_trigger = new_pos.sl_trigger
+                    pos.tp_sl_rate_trigger = new_pos.tp_sl_rate_trigger
                 elif new_pos is not None or not self.use_trailing_sl_tp:# don't close yet in an indecisicve market
                     pos.close_position(Position.TP, data['close'])
 
-    def sl_tp_diff(self, atr, adx, adx_avg):
+    def sl_tp_diff_trigger(self, atr):
+        return 0.8 * atr
+
+    def sl_tp_diff(self, atr):
         return 1.1 * atr
-        ratio = None
-        if adx < 20:
-            ratio = (adx_avg * self.tp_sl_ratio_weak) / 100
-        elif adx < 50:
-            ratio = (adx_avg * self.tp_sl_ratio_strong) / 100
-        elif adx < 70:
-            ratio = (adx_avg * self.tp_sl_ratio_very_strong) / 100
-        else:
-            ratio = (adx_avg * self.tp_sl_ratio_extremely_strong) / 100
-        return ratio * atr
 
     def calculate_volume(self, price_per_volume):
         # Initial Margin = Quantity X EntryPrice X IMR
@@ -754,10 +752,11 @@ class Trader:
                 entry_price = data['close']
                 entry_time = data['time']
                 volume = self.calculate_volume(self.current_price)
-                tp_sl_rate = self.sl_tp_diff(data['atr'], data['adx'], adx_avg)
+                tp_sl_rate = self.sl_tp_diff(data['atr'])
+                tp_sl_rate_trigger = self.sl_tp_diff_trigger(data['atr'])
 
                 pos = Position(
-                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate
+                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate, tp_sl_rate_trigger
                 )
             # if is downtrend
             # supertrend is downtrend
@@ -772,9 +771,10 @@ class Trader:
                 entry_price = data['close']
                 entry_time = data['time']
                 volume = self.calculate_volume(self.current_price)
-                tp_sl_rate = self.sl_tp_diff(data['atr'], data['adx'], adx_avg)
+                tp_sl_rate = self.sl_tp_diff(data['atr'])
+                tp_sl_rate_trigger = self.sl_tp_diff_trigger(data['atr'])
 
                 pos = Position(
-                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate
+                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate, tp_sl_rate_trigger
                 )
         return pos

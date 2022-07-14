@@ -1,3 +1,5 @@
+import time
+import threading
 from loguru import logger
 from sqlalchemy import true
 from utils.constants import Constants
@@ -7,7 +9,7 @@ class Position:
     TP = 'tp'
     SL = 'sl'
 
-    def __init__(self, parent, entry_price, entry_time, volume, leverage, order_type, tp_sl_rate):
+    def __init__(self, parent, entry_price, entry_time, volume, leverage, order_type, tp_sl_rate, tp_sl_rate_trigger):
         self.parent = parent
 
         self.volume = volume
@@ -26,10 +28,8 @@ class Position:
 
         self.tp = 0
         self.sl = 0
-        # used to decrease the close condition price to the latest price so the trade can close 
-        # as quick as possible
-        self.tp_temp = 0
-        self.sl_temp = 0
+        self.tp_trigger = 0
+        self.sl_trigger = 0
 
         self.trigger_exit_price = None
         self.exit_price = 0
@@ -48,16 +48,24 @@ class Position:
 
         
         self.tp_sl_rate = tp_sl_rate
+        self.tp_sl_rate_trigger = tp_sl_rate_trigger
         self.order_type = order_type
         self.update_tp_sl()
+        self.thread = None
 
     def update_tp_sl(self):
         if self.order_type == 'buy':
             self.tp = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate)
             self.sl = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate)
+            # sl and tp order trigger tp and sl
+            self.tp_trigger = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate_trigger)
+            self.sl_trigger = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate_trigger)
         else:
             self.tp = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate)
             self.sl = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate)
+            # sl and tp order trigger tp and sl
+            self.tp_trigger = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate_trigger)
+            self.sl_trigger = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate_trigger)
 
 
     def update_profit(self):
@@ -67,103 +75,41 @@ class Position:
     def change_price(self, price, percentage):
         return self.parent.get_precise_price(price + (price * percentage) / 100)
 
+    def try_close(self):
+        closed = False
+        while closed is False:
+            if self.is_closed:
+                closed = True
+            else:
+                tp_closed = self.tpOrderId is not None
+                sl_closed = self.slOrderId is not None
+                if not tp_closed:
+                    try:
+                        self.parent.take_profit(self)
+                        tp_closed = True
+                    except:
+                        tp_closed = False
+                if not sl_closed:
+                    try:
+                        self.parent.stop_loss(self)
+                        sl_closed = True
+                    except:
+                        sl_closed = False
+                        
+                closed = tp_closed and sl_closed
+                if not closed:
+                    time.sleep(2)
+        self.thread.join()
+        self.thread = None
+                
+
     def close_position(self, action=None, trigger_exit_price=None):
         if trigger_exit_price is not None:
             self.trigger_exit_price = trigger_exit_price
 
-        current_price = trigger_exit_price if trigger_exit_price is not None else self.parent.get_current_price()
-
-        closed = False
-        close_price_change_percentage = 0.1
-        close_price_change_percentage_diff = 0.1
-        min_close_price_change_percentage = 0.1
-        max_close_price_change_percentage = 0.2
-        while closed is False:
-            closed = self.try_close(current_price, close_price_change_percentage)
-            close_price_change_percentage = close_price_change_percentage + close_price_change_percentage_diff
-            if close_price_change_percentage > max_close_price_change_percentage:
-                close_price_change_percentage = min_close_price_change_percentage
-
-    def try_close(self, current_price, percentage):
-        price_up = self.change_price(current_price, percentage)
-        price_down = self.change_price(current_price, percentage * -1)
-
-        action_validation = None
-        if (current_price <= float(self.sl) and self.order_type == 'buy'):
-            try:
-                self.parent.stop_loss(self)
-                self.parent.take_profit(self)
-                return True
-            except:
-                self.sl = price_down
-                self.tp_temp = price_up
-                action_validation = Position.SL
-                try:
-                    self.parent.stop_loss(self)
-                    self.parent.take_profit(self)
-                    return True
-                except:
-                    return False
-        elif (current_price >= float(self.sl) and self.order_type == 'sell'):
-            try:
-                self.parent.stop_loss(self)
-                self.parent.take_profit(self)
-                return True
-            except:
-                self.sl = price_up
-                self.tp_temp = price_down
-                action_validation = Position.SL
-                try:
-                    self.parent.stop_loss(self)
-                    self.parent.take_profit(self)
-                    return True
-                except:
-                    return False
-        elif (current_price >= float(self.tp) and self.order_type == 'buy'):
-            try:
-                self.parent.take_profit(self)
-                self.parent.stop_loss(self)
-                return True
-            except:
-                self.tp = price_up
-                self.sl_temp = price_down
-                action_validation = Position.TP
-                try:
-                    self.parent.take_profit(self)
-                    self.parent.stop_loss(self)
-                    return True
-                except:
-                    return False
-        elif (current_price <= float(self.tp) and self.order_type == 'sell'):
-            try:
-                self.parent.take_profit(self)
-                self.parent.stop_loss(self)
-                return True
-            except:
-                self.tp = price_down
-                self.sl_temp = price_up
-                action_validation = Position.TP
-                try:
-                    self.parent.take_profit(self)
-                    self.parent.stop_loss(self)
-                    return True
-                except:
-                    return False
-        else:
-            try:
-                self.parent.take_profit(self)
-                self.parent.stop_loss(self)
-                return True
-            except:
-                self.tp_temp = price_up if self.order_type == 'buy' else price_down
-                self.sl_temp = price_up if self.order_type == 'sell' else price_down
-                try:
-                    self.parent.take_profit(self)
-                    self.parent.stop_loss(self)
-                    return True
-                except:
-                    return False
-
+        if self.thread is None:
+            self.thread = threading.Thread(target = self.try_close)
+            self.thread.start()
 
     def asdict(self):
         return {
@@ -183,8 +129,8 @@ class Position:
 
             'tp': self.tp,	
             'sl': self.sl,
-            'tp_temp': self.tp_temp,	
-            'sl_temp': self.sl_temp,	
+            'tp_trigger': self.tp_trigger,	
+            'sl_trigger': self.sl_trigger,	
 
             'trigger_exit_price': self.trigger_exit_price,	
             'exit_price': self.exit_price,	
@@ -203,5 +149,6 @@ class Position:
 
             
             'tp_sl_rate': self.tp_sl_rate,	
+            'tp_sl_rate_trigger': self.tp_sl_rate_trigger,
             'order_type': self.order_type,	
         }

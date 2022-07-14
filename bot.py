@@ -543,7 +543,7 @@ class TradeBot:
     def error_handler(self, update: Update, context: CallbackContext) -> None:
         logger.error('Exception while handling an update')
         logger.error(context.error)
-        chat_message(update, context, text=f'⛔️ Exception while handling an update\n{context.error}', edit=False)
+        chat_message(update, context, text=f'⛔️ Error while handling an update\n\n <b>Error:</b> {context.error}\n\n Try Again!', edit=False)
 
     def adduser(self, id: str, key: str, secret: str, update: Update, context: CallbackContext):
         self.users[self.get_user_key_from_id(id)] = {
