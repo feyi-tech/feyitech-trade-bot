@@ -431,6 +431,7 @@ class TradeBot:
                 f'{Constants.log_dir_name}/{Constants.info_log_filename}', 
                 f'{Constants.log_dir_name}/{Constants.warning_log_filename}', 
                 f'{Constants.log_dir_name}/{Constants.error_log_filename}', 
+                f'{Constants.log_dir_name}/{Constants.pos_log_filename}', 
                 f'{Constants.log_dir_name}/{Constants.chart_log_db_filename}',
             ]
         )

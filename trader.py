@@ -40,7 +40,7 @@ class Trader:
         self.api_key = api_key
         self.api_secret = api_secret
         self.symbol = symbol.upper()
-        self.client = Client(api_key=self.api_key, api_secret=self.api_secret, testnet=True)
+        self.client = Client(api_key=self.api_key, api_secret=self.api_secret, testnet=False)
         self.use_trailing_sl_tp = use_trailing_sl_tp
         self.tp_sl_ratio_weak = tp_sl_ratio_weak
         self.tp_sl_ratio_strong = tp_sl_ratio_strong
@@ -171,8 +171,8 @@ class Trader:
         self.build_key_value('supertrend_trend', round(self.supertrend_trend, 2))])
 
     def get_current_price(self):
-        # return float(self.client.futures_mark_price(symbol=self.symbol)['markPrice'])
-        return float(self.client.futures_symbol_ticker(symbol=self.symbol)['price'])
+        return float(self.client.futures_mark_price(symbol=self.symbol)['markPrice'])
+        # return float(self.client.futures_symbol_ticker(symbol=self.symbol)['price'])
 
     def get_symbol(self):
         return self.parent.get_symbol_info(symbol=self.symbol, is_futures=True)
@@ -239,7 +239,10 @@ class Trader:
                     # send the dataframe to the bot to react on 
                     df = self.react(df)
                     # log the chart dataframe for later debugging or bot improvement
-                    chartlog(df)
+                    try:
+                        chartlog(df)
+                    except Exception as e:
+                        logger.warning(f'ChartLogError: {e}')
                     try:
                         # create a picture of the latest chart with profits and loss points marked
                         self.update_chart_photo(df)
@@ -510,13 +513,12 @@ class Trader:
             order = self.client.futures_create_order(
                 symbol=self.symbol,
                 side='SELL' if position.order_type == 'buy' else 'BUY',
-                type='TAKE_PROFIT', # 'TAKE_PROFIT' || TAKE_PROFIT_MARKET
+                type='TAKE_PROFIT_MARKET', # 'TAKE_PROFIT' || TAKE_PROFIT_MARKET
                 #positionSide='LONG' if position.order_type == 'buy' else 'SHORT',
                 quantity=position.volume,
                 stopPrice=position.tp,
                 closePosition=True,
-                timeInForce='GTE_GTC',
-                price=position.tp
+                timeInForce='GTE_GTC'
             )
             position.tpOrderId = order['orderId']
             position.tpClientOrderId = order['clientOrderId']
@@ -534,13 +536,12 @@ class Trader:
             order = self.client.futures_create_order(
                 symbol=self.symbol,
                 side='SELL' if position.order_type == 'buy' else 'BUY',
-                type='STOP', # STOP || STOP_MARKET
+                type='STOP_MARKET', # STOP || STOP_MARKET
                 #positionSide='LONG' if position.order_type == 'buy' else 'SHORT',
                 quantity=position.volume,
                 stopPrice=position.sl,
                 closePosition=True,
-                timeInForce='GTE_GTC',
-                price=position.sl
+                timeInForce='GTE_GTC'
             )
             position.slOrderId = order['orderId']
             position.slClientOrderId = order['clientOrderId']
@@ -691,7 +692,7 @@ class Trader:
 
                     pos.tp_trigger = new_pos.tp_trigger
                     pos.sl_trigger = new_pos.sl_trigger
-                    pos.tp_sl_rate_trigger = new_pos.tp_sl_rate_trigger
+                    pos.tp_sl_trigger_rate = new_pos.tp_sl_trigger_rate
                 elif new_pos is not None or not self.use_trailing_sl_tp:# don't close yet in an indecisicve market
                     pos.close_position(Position.TP, data['close'])
             elif (float(data['close']) <= float(pos.tp_trigger) and pos.order_type == 'sell'):
@@ -703,12 +704,12 @@ class Trader:
                     
                     pos.tp_trigger = new_pos.tp_trigger
                     pos.sl_trigger = new_pos.sl_trigger
-                    pos.tp_sl_rate_trigger = new_pos.tp_sl_rate_trigger
+                    pos.tp_sl_trigger_rate = new_pos.tp_sl_trigger_rate
                 elif new_pos is not None or not self.use_trailing_sl_tp:# don't close yet in an indecisicve market
                     pos.close_position(Position.TP, data['close'])
 
     def sl_tp_diff_trigger(self, atr):
-        return 0.8 * atr
+        return 0.7 * atr
 
     def sl_tp_diff(self, atr):
         return 1.1 * atr
@@ -753,10 +754,10 @@ class Trader:
                 entry_time = data['time']
                 volume = self.calculate_volume(self.current_price)
                 tp_sl_rate = self.sl_tp_diff(data['atr'])
-                tp_sl_rate_trigger = self.sl_tp_diff_trigger(data['atr'])
+                tp_sl_trigger_rate = self.sl_tp_diff_trigger(data['atr'])
 
                 pos = Position(
-                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate, tp_sl_rate_trigger
+                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate, tp_sl_trigger_rate
                 )
             # if is downtrend
             # supertrend is downtrend
@@ -772,9 +773,9 @@ class Trader:
                 entry_time = data['time']
                 volume = self.calculate_volume(self.current_price)
                 tp_sl_rate = self.sl_tp_diff(data['atr'])
-                tp_sl_rate_trigger = self.sl_tp_diff_trigger(data['atr'])
+                tp_sl_trigger_rate = self.sl_tp_diff_trigger(data['atr'])
 
                 pos = Position(
-                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate, tp_sl_rate_trigger
+                    self, entry_price, entry_time, volume, self.leverage, order_type, tp_sl_rate, tp_sl_trigger_rate
                 )
         return pos

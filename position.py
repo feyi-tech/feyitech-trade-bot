@@ -9,7 +9,7 @@ class Position:
     TP = 'tp'
     SL = 'sl'
 
-    def __init__(self, parent, entry_price, entry_time, volume, leverage, order_type, tp_sl_rate, tp_sl_rate_trigger):
+    def __init__(self, parent, entry_price, entry_time, volume, leverage, order_type, tp_sl_rate, tp_sl_trigger_rate):
         self.parent = parent
 
         self.volume = volume
@@ -48,7 +48,7 @@ class Position:
 
         
         self.tp_sl_rate = tp_sl_rate
-        self.tp_sl_rate_trigger = tp_sl_rate_trigger
+        self.tp_sl_trigger_rate = tp_sl_trigger_rate
         self.order_type = order_type
         self.update_tp_sl()
         self.thread = None
@@ -58,14 +58,14 @@ class Position:
             self.tp = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate)
             self.sl = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate)
             # sl and tp order trigger tp and sl
-            self.tp_trigger = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate_trigger)
-            self.sl_trigger = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate_trigger)
+            self.tp_trigger = self.parent.get_precise_price(self.entry_price + self.tp_sl_trigger_rate)
+            self.sl_trigger = self.parent.get_precise_price(self.entry_price - self.tp_sl_trigger_rate)
         else:
             self.tp = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate)
             self.sl = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate)
             # sl and tp order trigger tp and sl
-            self.tp_trigger = self.parent.get_precise_price(self.entry_price - self.tp_sl_rate_trigger)
-            self.sl_trigger = self.parent.get_precise_price(self.entry_price + self.tp_sl_rate_trigger)
+            self.tp_trigger = self.parent.get_precise_price(self.entry_price - self.tp_sl_trigger_rate)
+            self.sl_trigger = self.parent.get_precise_price(self.entry_price + self.tp_sl_trigger_rate)
 
 
     def update_profit(self):
@@ -81,30 +81,53 @@ class Position:
             if self.is_closed:
                 closed = True
             else:
-                tp_closed = self.tpOrderId is not None
-                sl_closed = self.slOrderId is not None
-                if not tp_closed:
-                    try:
-                        self.parent.take_profit(self)
-                        tp_closed = True
-                    except:
-                        tp_closed = False
-                if not sl_closed:
-                    try:
-                        self.parent.stop_loss(self)
-                        sl_closed = True
-                    except:
-                        sl_closed = False
-                        
-                closed = tp_closed and sl_closed
+                try:
+                    price = self.parent.get_current_price()
+                    # If the current price is leading the take profit mark, use the tp/sl trigger rate
+                    # with the current price to create another tp that leads the current price
+                    if self.order_type == 'buy' and price >= self.tp:
+                        self.tp = self.parent.get_precise_price(price + self.tp_sl_trigger_rate / 1.5)
+                        self.sl = self.parent.get_precise_price(price - self.tp_sl_trigger_rate / 1.5)
+                    elif self.order_type == 'sell' and price <= self.tp:
+                        self.tp = self.parent.get_precise_price(price - self.tp_sl_trigger_rate / 1.5)
+                        self.sl = self.parent.get_precise_price(price + self.tp_sl_trigger_rate / 1.5)
+                    elif self.order_type == 'buy' and price <= self.sl:
+                        self.sl = self.parent.get_precise_price(price - self.tp_sl_trigger_rate / 1.5)
+                        self.tp = self.parent.get_precise_price(price + self.tp_sl_trigger_rate / 1.5)
+                    elif self.order_type == 'sell' and price >= self.sl:
+                        self.sl = self.parent.get_precise_price(price + self.tp_sl_trigger_rate / 1.5)
+                        self.tp = self.parent.get_precise_price(price - self.tp_sl_trigger_rate / 1.5)
+                    self.parent.take_profit(self)
+                    self.parent.stop_loss(self)
+                    closed = True
+                except Exception as e:
+                    log = f"==NotClosed:TP.error==\n{str(e)}"
+                    filelog(
+                        f'{Constants.log_dir_name}/{Constants.pos_log_filename}', log + Constants.log_text_nl
+                    )
+                    # APIError(code=-4129): Time in Force (TIF) GTE can only be used with open positions or open orders. 
+                    # Please ensure that open orders or positions are available.
+                    if 'apierror(code=-4129)' in str(e).lower():
+                        self.is_closed = True
+                    else:
+                        closed = False
                 if not closed:
+                    log = f"==NotClosed==\n{str(self.asdict())}"
+                    filelog(
+                        f'{Constants.log_dir_name}/{Constants.pos_log_filename}', log + Constants.log_text_nl
+                    )
                     time.sleep(2)
         self.thread.join()
         self.thread = None
+        log = f"==!Closed!==\n{str(self.asdict())}"
+        filelog(
+            f'{Constants.log_dir_name}/{Constants.pos_log_filename}', log + Constants.log_text_nl
+        )
                 
 
     def close_position(self, action=None, trigger_exit_price=None):
         if trigger_exit_price is not None:
+            self.action = action
             self.trigger_exit_price = trigger_exit_price
 
         if self.thread is None:
@@ -149,6 +172,6 @@ class Position:
 
             
             'tp_sl_rate': self.tp_sl_rate,	
-            'tp_sl_rate_trigger': self.tp_sl_rate_trigger,
+            'tp_sl_trigger_rate': self.tp_sl_trigger_rate,
             'order_type': self.order_type,	
         }
